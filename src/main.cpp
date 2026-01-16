@@ -14,11 +14,28 @@ Arduino_DataBus *bus = new Arduino_ESP32QSPI(
 Arduino_SH8601 *gfx = new Arduino_SH8601(
     bus, GFX_NOT_DEFINED /* RST */, 0 /* rotation */, LCD_WIDTH /* width */, LCD_HEIGHT /* height */);
 
-// put function declarations here:
+std::shared_ptr<Arduino_IIC_DriveBus> IIC_Bus =
+  std::make_shared<Arduino_HWIIC>(IIC_SDA, IIC_SCL, &Wire);
+
+void Arduino_IIC_Touch_Interrupt(void);
+
+std::unique_ptr<Arduino_IIC> FT3168(new Arduino_FT3x68(
+    IIC_Bus, FT3168_DEVICE_ADDRESS,
+    DRIVEBUS_DEFAULT_VALUE, TP_INT, Arduino_IIC_Touch_Interrupt));
+
+void Arduino_IIC_Touch_Interrupt(void) {
+  FT3168->IIC_Interrupt_Flag = true;
+}
 
 void setup() {
   USBSerial.begin(115200);
   USBSerial.println("Arduino_GFX Hello World example");
+
+  while (FT3168->begin() == false) {
+    USBSerial.println("FT3168 initialization fail");
+    delay(2000);
+  }
+  USBSerial.println("FT3168 initialization successfully");
 
 #ifdef GFX_EXTRA_PRE_INIT
   GFX_EXTRA_PRE_INIT();
@@ -41,6 +58,11 @@ void setup() {
 }
 
 void loop() {
+  if (FT3168->IIC_Interrupt_Flag == true) {
+    FT3168->IIC_Interrupt_Flag = false;
+    gfx->fillScreen(RGB565_BLACK);
+  }
+
   gfx->setCursor(random(gfx->width()), random(gfx->height()));
   gfx->setTextColor(random(0xffff), random(0xffff));
   gfx->setTextSize(random(6) /* x scale */, random(6) /* y scale */, random(2) /* pixel_margin */);
